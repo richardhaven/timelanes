@@ -15,22 +15,17 @@ const _defaultTimelineStyle = TextStyle();
 const _defaultLaneTitleStyle = TextStyle();
 const _dividerHeight = 4.0;
 
-final List<String> _emptyLanes = List<String>.empty();
-
 const double timelineHeight = 25;
 
-// moving this into its own file does not seems to gain very much
 class TimeEvent {
-  late DateTime start;
-  late DateTime? end;
-  late int laneIndex;
-  late int priority;
-  late TimeEventWidgetBuilder? builder;
-  late String title;
-  late double offsetLeft;
+  DateTime start;
+  DateTime? end;
+  int laneIndex;
+  int priority;
+  TimeEventWidgetBuilder? builder;
+  String title;
+  double offsetLeft;
   TextStyle? titleStyle;
-
-  Widget? widget;
 
   TimeEvent({
     required this.start,
@@ -46,160 +41,137 @@ class TimeEvent {
 enum TimelaneTitlePosition { left, right, both }
 
 class Timelanes extends StatelessWidget {
-  late final List<String> lanesAbove;
-  late final List<String> lanesBelow;
-  late final DateTime earliestDate;
-  late final DateTime latestDate;
+  final List<String> lanesAbove;
+  final List<String> lanesBelow;
+  final DateTime earliestDate;
+  final DateTime latestDate;
+  final double? dateLabelOffset;
+  final String? dateLabelFormat;
+  final TextStyle dateLabelStyle;
+  final TextStyle timelineStyle;
+  final TextStyle laneTitleStyle;
+  final TimelaneTitlePosition laneTitlePosition;
+  final Axis laneTitleOrientation;
+  final bool showSwimlanes;
+  final TimeEventWidgetBuilder? fallbackEventBuilder;
+  final List<TimeEvent>? events;
 
-  late final double? dateLabelOffset;
-  late final String? dateLabelFormat;
-  late final TextStyle dateLabelStyle;
-  late final TextStyle timelineStyle;
-  late final TextStyle laneTitleStyle;
-  late final TimelaneTitlePosition laneTitlePosition;
-  late final Axis laneTitleOrientation;
-  late final bool showSwimlanes;
-  late final TimeEventWidgetBuilder? fallbackEventBuilder;
+  const Timelanes({
+    super.key,
+    required this.earliestDate,
+    required this.latestDate,
+    List<String>? lanesAbove,
+    List<String>? lanesBelow,
+    this.dateLabelOffset,
+    this.dateLabelFormat = _defaultDateLabelFormat,
+    this.dateLabelStyle = _defaultDateLabelStyle,
+    this.timelineStyle = _defaultTimelineStyle,
+    this.laneTitleStyle = _defaultLaneTitleStyle,
+    this.laneTitlePosition = TimelaneTitlePosition.left,
+    this.laneTitleOrientation = Axis.horizontal,
+    this.showSwimlanes = true,
+    this.fallbackEventBuilder,
+    this.events,
+  })  : lanesAbove = lanesAbove ?? const <String>[],
+        lanesBelow = lanesBelow ?? const <String>[];
 
-  Timelanes(
-      {super.key,
-      required this.earliestDate,
-      required this.latestDate,
-      List<String>? lanesAbove,
-      List<String>? lanesBelow,
-      this.dateLabelOffset,
-      this.dateLabelFormat = _defaultDateLabelFormat,
-      this.dateLabelStyle = _defaultDateLabelStyle, // TODO
-      this.timelineStyle = _defaultTimelineStyle, // TODO
-      this.laneTitleStyle = _defaultLaneTitleStyle,
-      this.laneTitlePosition = TimelaneTitlePosition.left,
-      this.laneTitleOrientation = Axis.horizontal,
-      this.showSwimlanes = true,
-      this.fallbackEventBuilder,
-      this.events}) {
-    if (lanesAbove == null) {
-      this.lanesAbove = _emptyLanes; // cannot be a default parameter value
-    } else {
-      this.lanesAbove = lanesAbove;
-    }
-    if (lanesBelow == null) {
-      this.lanesBelow = _emptyLanes; // cannot be a default parameter value
-    } else {
-      this.lanesBelow = lanesBelow;
-    }
-  }
-
-  late final List<TimeEvent>? events;
-
-  int get laneCount {
-    return this.lanesAbove.length + this.lanesBelow.length;
-  }
+  int get laneCount => lanesAbove.length + lanesBelow.length;
 
   @override
   Widget build(BuildContext context) {
-    Widget result = LayoutBuilder(builder: (BuildContext context, BoxConstraints constraints) {
-      if (this.laneCount == 0) {
+    return LayoutBuilder(builder: (BuildContext context, BoxConstraints constraints) {
+      if (laneCount == 0) {
         return buildTimeline(constraints.maxWidth);
       }
       double availableLanesHeight = constraints.maxHeight - timelineHeight;
-      if (this.showSwimlanes) {
-        availableLanesHeight -= (_dividerHeight * (this.laneCount + 1));
+      if (showSwimlanes) {
+        availableLanesHeight -= (_dividerHeight * (laneCount + 1));
       }
-      double heightPerLane = availableLanesHeight / this.laneCount;
+      double heightPerLane = availableLanesHeight / laneCount;
       return buildTimelanes(context, constraints, heightPerLane, constraints.maxWidth);
     });
-    return result;
   }
 
-// TODO: make separate title Widget instead of placing a title Widget within a lane
+  // TODO: make separate title Widget instead of placing a title Widget within a lane
   Widget buildTimelanes(BuildContext context, BoxConstraints constraints, double laneHeight, double laneWidth) {
-    Size maxLanesAboveTitleSize = _maxTextSize(this.lanesAbove, this.laneTitleStyle);
-    Size maxLanesBelowTitleSize = _maxTextSize(this.lanesBelow, this.laneTitleStyle);
+    Size maxLanesAboveTitleSize = _maxTextSize(lanesAbove, laneTitleStyle);
+    Size maxLanesBelowTitleSize = _maxTextSize(lanesBelow, laneTitleStyle);
     double maxLaneTitleWidth = max(maxLanesAboveTitleSize.width, maxLanesBelowTitleSize.width);
 
     double remainingLaneWidth = constraints.maxWidth - maxLaneTitleWidth;
-    if (this.laneTitlePosition == TimelaneTitlePosition.both) {
+    if (laneTitlePosition == TimelaneTitlePosition.both) {
       remainingLaneWidth = constraints.maxWidth - (maxLaneTitleWidth * 2);
     }
 
-    createEventWidgets(this.events, remainingLaneWidth, maxLaneTitleWidth, laneHeight);
+    Map<TimeEvent, Widget> eventWidgets = createEventWidgets(events, remainingLaneWidth, maxLaneTitleWidth, laneHeight);
 
     List<Widget> rows = List<Widget>.empty(growable: true);
 
     for (int index = 0; index < lanesAbove.length; index++) {
-      if (this.showSwimlanes) {
+      if (showSwimlanes) {
         rows.add(const Divider(height: _dividerHeight));
       }
 
-      List<TimeEvent> laneEvents = eventsForLane(this.events, index);
+      List<TimeEvent> laneEvents = eventsForLane(events, index);
       List<TimeEvent> sortedEvents = sortEventsPriorityDescending(laneEvents);
 
-      Widget lane = buildLane(sortedEvents, lanesAbove[index], laneWidth, laneHeight);
-      rows.add(lane);
+      rows.add(buildLane(sortedEvents, eventWidgets, lanesAbove[index], laneWidth, laneHeight));
     }
 
     rows.add(buildTimeline(laneWidth));
-    if (this.showSwimlanes) {
+    if (showSwimlanes) {
       rows.add(const Divider(height: _dividerHeight));
     }
 
     for (int index = 0; index < lanesBelow.length; index++) {
       int laneIndex = index + lanesAbove.length;
 
-      List<TimeEvent> laneEvents = eventsForLane(this.events, laneIndex);
+      List<TimeEvent> laneEvents = eventsForLane(events, laneIndex);
       List<TimeEvent> sortedEvents = sortEventsPriorityDescending(laneEvents);
 
-      Widget lane = buildLane(sortedEvents, lanesBelow[index], laneWidth, laneHeight);
-      rows.add(lane);
+      rows.add(buildLane(sortedEvents, eventWidgets, lanesBelow[index], laneWidth, laneHeight));
 
-      if (this.showSwimlanes) {
+      if (showSwimlanes) {
         rows.add(const Divider(height: _dividerHeight));
       }
-
-      laneIndex++;
     }
 
     return Column(children: rows);
   }
 
-  Widget buildLane(List<TimeEvent> events, String title, double laneWidth, laneHeight) {
-    List<Widget> eventWidgets = List<Widget>.empty(growable: true);
+  Widget buildLane(List<TimeEvent> events, Map<TimeEvent, Widget> eventWidgets, String title, double laneWidth, double laneHeight) {
+    List<Widget> children = List<Widget>.empty(growable: true);
 
-    if (this.laneTitlePosition == TimelaneTitlePosition.left || this.laneTitlePosition == TimelaneTitlePosition.both) {
-      Widget laneTitle = _buildLaneTitle(title, this.laneTitleOrientation, this.laneTitleStyle, laneHeight, laneWidth, TimelaneTitlePosition.left);
-      eventWidgets.add(laneTitle);
+    if (laneTitlePosition == TimelaneTitlePosition.left || laneTitlePosition == TimelaneTitlePosition.both) {
+      children.add(_buildLaneTitle(title, laneTitleOrientation, laneTitleStyle, laneHeight, laneWidth, TimelaneTitlePosition.left));
     }
 
     for (var event in events) {
-      if (event.widget != null) {
-        eventWidgets.add(event.widget!);
+      Widget? widget = eventWidgets[event];
+      if (widget != null) {
+        children.add(widget);
       }
     }
-    if (this.laneTitlePosition == TimelaneTitlePosition.right || this.laneTitlePosition == TimelaneTitlePosition.both) {
-      Widget laneTitle = _buildLaneTitle(title, this.laneTitleOrientation, this.laneTitleStyle, laneHeight, laneWidth, TimelaneTitlePosition.right);
-      eventWidgets.add(laneTitle);
+
+    if (laneTitlePosition == TimelaneTitlePosition.right || laneTitlePosition == TimelaneTitlePosition.both) {
+      children.add(_buildLaneTitle(title, laneTitleOrientation, laneTitleStyle, laneHeight, laneWidth, TimelaneTitlePosition.right));
     }
 
-    Widget result = Container(
+    return Container(
       padding: const EdgeInsets.fromLTRB(5, 0, 5, 0),
       width: laneWidth,
       height: laneHeight,
       clipBehavior: Clip.none,
-      child: Stack(children: eventWidgets),
+      child: Stack(children: children),
     );
-
-    return result;
   }
 
   Widget _buildLaneTitle(String text, Axis orientation, TextStyle style, double laneHeight, double laneWidth, TimelaneTitlePosition alignment) {
     text = text.replaceAll("\\n", "\n");
-    if (this.laneTitleOrientation == Axis.horizontal) {
+    if (orientation == Axis.horizontal) {
       Size titleSize = _textSize(text, style, width: 500);
       double top = (laneHeight / 2) - (titleSize.height / 2);
-      double left = 0;
-      if (alignment == TimelaneTitlePosition.right) {
-        left = laneWidth - (titleSize.width + 10);
-      }
+      double left = alignment == TimelaneTitlePosition.right ? laneWidth - (titleSize.width + 10) : 0;
       return Positioned(
           left: left,
           top: top,
@@ -218,10 +190,7 @@ class Timelanes extends StatelessWidget {
       double titleWidth = min(laneHeight, 150);
       Size titleSize = _textSize(text, style, width: titleWidth);
       double top = (laneHeight / 2) - (titleSize.width / 2);
-      double left = 0;
-      if (alignment == TimelaneTitlePosition.right) {
-        left = laneWidth - (titleSize.height + 10);
-      }
+      double left = alignment == TimelaneTitlePosition.right ? laneWidth - (titleSize.height + 10) : 0;
       return Positioned(
           left: left,
           top: top,
@@ -243,39 +212,36 @@ class Timelanes extends StatelessWidget {
   }
 
   Widget buildTimeline(double laneWidth) {
-    Duration timelineDuration = this.latestDate.difference(this.earliestDate);
+    Duration timelineDuration = latestDate.difference(earliestDate);
 
-    String earliestDateText = formatDateTime(this.earliestDate, timelineDuration, this.dateLabelFormat);
-    String latestDateText = formatDateTime(this.latestDate, timelineDuration, this.dateLabelFormat);
+    String earliestDateText = formatDateTime(earliestDate, timelineDuration, dateLabelFormat);
+    String latestDateText = formatDateTime(latestDate, timelineDuration, dateLabelFormat);
 
-    Widget result = SizedBox(
-      height: calculateTimelineHeight(),
+    return SizedBox(
+      width: laneWidth,
+      height: timelineHeight,
       child: Column(children: [
         //  TODO: intermediate ticks: calculate total time and pick a good intermediate tick frequency
-        Divider(height: 5),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(5, 0, 5, 0),
-          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text(earliestDateText),
-            Text(latestDateText),
-          ]),
-        )
+        const Divider(height: 5),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(5, 0, 5, 0),
+            child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text(earliestDateText),
+              Text(latestDateText),
+            ]),
+          ),
+        ),
       ]),
     );
-
-    return result;
   }
 
-  double calculateTimelineHeight() {
-    // TODO: based on timelineStyle
-    return 20.0;
-  }
-
-  void createEventWidgets(List<TimeEvent>? events, double laneWidth, double left, double laneHeight) {
-    Duration timelineDuration = this.latestDate.difference(this.earliestDate);
+  Map<TimeEvent, Widget> createEventWidgets(List<TimeEvent>? events, double laneWidth, double left, double laneHeight) {
+    Map<TimeEvent, Widget> result = {};
+    Duration timelineDuration = latestDate.difference(earliestDate);
     double pixelsPerMinute = laneWidth / timelineDuration.inMinutes;
     events?.forEach((TimeEvent event) {
-      if (event.laneIndex < 0 || event.laneIndex >= this.laneCount) {
+      if (event.laneIndex < 0 || event.laneIndex >= laneCount) {
         return;
       }
       if (event.start.isAfter(latestDate)) {
@@ -289,10 +255,10 @@ class Timelanes extends StatelessWidget {
       }
 
       EventAlignment eventAlignment;
-      if ((event.end == null) || (!event.start.isBefore(earliestDate) && !event.end!.isAfter(latestDate))) {
+      if (event.end == null || (!event.start.isBefore(earliestDate) && !event.end!.isAfter(latestDate))) {
         eventAlignment = EventAlignment.full;
       } else if (event.start.isBefore(earliestDate)) {
-        if (event.start.isAfter(latestDate)) {
+        if (event.end!.isAfter(latestDate)) {
           eventAlignment = EventAlignment.bothPartial;
         } else {
           eventAlignment = EventAlignment.earlyPartial;
@@ -304,36 +270,35 @@ class Timelanes extends StatelessWidget {
       Widget eventWidget;
       if (event.builder != null) {
         eventWidget = event.builder!(event, laneHeight, pixelsPerMinute, eventAlignment);
-      } else if (this.fallbackEventBuilder != null) {
-        eventWidget = this.fallbackEventBuilder!(event, laneHeight, pixelsPerMinute, eventAlignment);
+      } else if (fallbackEventBuilder != null) {
+        eventWidget = fallbackEventBuilder!(event, laneHeight, pixelsPerMinute, eventAlignment);
       } else if (event.title != "") {
         eventWidget = Text(event.title);
       } else {
         return;
       }
 
-      Duration eventOffset = event.start.difference(this.earliestDate);
+      Duration eventOffset = event.start.difference(earliestDate);
       double eventOffsetRatio = eventOffset.inSeconds / timelineDuration.inSeconds;
       double eventLeft = left + event.offsetLeft + (laneWidth * eventOffsetRatio);
 
-      event.widget = Positioned(left: eventLeft, child: eventWidget);
+      result[event] = Positioned(left: eventLeft, child: eventWidget);
     });
+    return result;
   }
 
-  List<TimeEvent> sortEventsPriorityDescending(List<TimeEvent> laneEvents) {
+  static List<TimeEvent> sortEventsPriorityDescending(List<TimeEvent> laneEvents) {
     laneEvents.sort((TimeEvent event2, event1) => event1.priority.compareTo(event2.priority));
     return laneEvents;
   }
 
-  List<TimeEvent> eventsForLane(List<TimeEvent>? events, int laneIndex) {
+  static List<TimeEvent> eventsForLane(List<TimeEvent>? events, int laneIndex) {
     List<TimeEvent> result = List<TimeEvent>.empty(growable: true);
-
     events?.forEach((TimeEvent event) {
       if (event.laneIndex == laneIndex) {
         result.add(event);
       }
     });
-
     return result;
   }
 }
@@ -357,7 +322,7 @@ Widget createTimePeriod(
       eventAlignment = EventAlignment.full;
     }
     MainAxisAlignment titleAlign = MainAxisAlignment.center;
-    Widget? box = null;
+    Widget? box;
     switch (eventAlignment) {
       case EventAlignment.full:
       case EventAlignment.bothPartial:
@@ -402,7 +367,7 @@ Size _maxTextSize(List<String>? texts, TextStyle style) {
 String formatDateTime(DateTime dateTime, Duration scope, String? format) {
   if (format == null) {
     if (scope < const Duration(days: 1)) {
-      format = "hh:mm";
+      format = "HH:mm";
     } else if (scope < const Duration(days: 365)) {
       format = "dd MMMM yy";
     } else if (scope < const Duration(days: 1500)) {

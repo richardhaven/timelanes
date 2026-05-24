@@ -151,6 +151,7 @@ class _MyHomePageState extends State<MyHomePage> {
     _dateLabelFormatController.dispose();
     _lanesAboveController.dispose();
     _lanesBelowController.dispose();
+
     super.dispose();
   }
 
